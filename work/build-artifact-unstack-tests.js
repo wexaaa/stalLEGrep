@@ -1,0 +1,6 @@
+var offlineHome=java.lang.System.getenv('STALCRAFT_HOME'); if(!offlineHome) throw new Error('Set STALCRAFT_HOME to the game directory'); offlineHome=String(offlineHome).replace(/\\/g,'/').replace(/\/$/,'');
+var CP=Java.type('javassist.ClassPool'),Method=Java.type('javassist.CtNewMethod'),pool=new CP(true),root=(offlineHome+'/');pool.appendClassPath('work/split-native-test-only');pool.appendClassPath('work/split-test-only');pool.appendClassPath('work/container-test-only');pool.appendClassPath('work/research-test-only');pool.appendClassPath('work/item-test-only');pool.appendClassPath(root+'classes/classes.jar');pool.appendClassPath(root+'classes/libs.jar');
+var nativePool=new CP(true);nativePool.appendClassPath('work/offline-patches-artifact-unstack.jar');nativePool.appendClassPath(root+'classes/classes.jar');nativePool.appendClassPath(root+'classes/libs.jar');nativePool.get('zhku').writeFile('work/artifact-unstack-test-only');
+var view=pool.get('dhmd');view.getDeclaredMethod('isMutable').setBody('{return true;}');view.writeFile('work/artifact-unstack-test-only');
+var item=pool.get('lrhp');item.addMethod(Method.make('public lrhp func_77625_d(int n){limit=n;return this;}',item));item.writeFile('work/artifact-unstack-test-only');
+print('BUILT native grid artifact-unstack fixture');

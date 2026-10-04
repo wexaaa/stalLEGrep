@@ -1,0 +1,16 @@
+var offlineHome=java.lang.System.getenv('STALCRAFT_HOME'); if(!offlineHome) throw new Error('Set STALCRAFT_HOME to the game directory'); offlineHome=String(offlineHome).replace(/\\/g,'/').replace(/\/$/,'');
+var Jar=Java.type('java.util.jar.JarFile'),MD=Java.type('java.security.MessageDigest'),Arrays=Java.type('java.util.Arrays'),Class=Java.type('java.lang.Class');
+var base=new Jar((offlineHome+'/classes/offline-patches.jar')),candidate=new Jar('work/offline-patches-artifact-containers.jar'),changed='ServerPacketHandler.class';
+var loader=Java.type('javassist.ClassPool').class.getClassLoader();for each(var n in ['OfflineArtifactContainers','ServerPacketHandler']){Class.forName(n,false,loader);print('VERIFIED '+n);}
+function hash(j,e){var md=MD.getInstance('SHA-256'),b=new (Java.type('byte[]'))(8192),n,s=j.getInputStream(e);while((n=s.read(b))>0)md.update(b,0,n);s.close();return String(Arrays.toString(md.digest()));}
+var es=base.entries(),preserved=0;while(es.hasMoreElements()){var e=es.nextElement();if(String(e.getName())===changed)continue;var other=candidate.getJarEntry(e.getName());if(other===null||hash(base,e)!==hash(candidate,other))throw new Error('Prior fix changed: '+e.getName());preserved++;}
+if(candidate.size()!==base.size()+1 || candidate.getJarEntry('OfflineArtifactContainers.class')===null)throw new Error('Unexpected entries added');
+var Reader=Java.type('org.objectweb.asm.ClassReader'),Node=Java.type('org.objectweb.asm.tree.ClassNode'),Trace=Java.type('org.objectweb.asm.util.TraceMethodVisitor'),Printer=Java.type('org.objectweb.asm.util.Textifier');
+function node(j,name){var n=new Node();new Reader(j.getInputStream(j.getJarEntry(name))).accept(n,0);return n;}
+function methods(j){var n=node(j,changed),out={};for each(var m in Java.from(n.methods.toArray())){var p=new Printer();m.accept(new Trace(p));out[String(m.name)+String(m.desc)]=String(p.getText());}return out;}
+var old=methods(base),updated=methods(candidate),unchanged=0;for(var key in old){if(key.indexOf('handleInventoryPacket(')===0)continue;if(old[key]!==updated[key])throw new Error('Unrelated server method changed: '+key);unchanged++;}
+var h=node(candidate,changed),calls=0;for each(var m in h.methods.toArray())if(String(m.name)==='handleInventoryPacket')for each(var i in m.instructions.toArray())if(i.owner!==undefined && String(i.owner)==='OfflineArtifactContainers' && String(i.name)==='handle' && String(i.desc)==='(Lkldc;Ljlas;)V')calls++;
+if(calls!==1)throw new Error('Container packet route missing/duplicated');
+var helper=node(candidate,'OfflineArtifactContainers.class'),reads=0,callbacks=0;for each(var m in helper.methods.toArray())for each(var i in m.instructions.toArray()){if(i.owner!==undefined&&String(i.owner)==='apiz'&&String(i.name)==='_b'){if(String(i.desc)!=='(Lvoib;Ljava/lang/Object;)Lvoib;')throw new Error('Wrong attachment getter overload');reads++;}if(i.owner!==undefined&&String(i.owner)==='dhmd'&&String(i.name)==='onInventoryChanged')callbacks++;}
+if(reads!==2||callbacks!==1)throw new Error('Native container getter/stat callback missing');
+print('PRESERVED '+preserved+' prior entries and '+unchanged+' other server methods; '+base.size()+' -> '+candidate.size()+' entries; native packet route/NBT getter/stat callback checked');base.close();candidate.close();

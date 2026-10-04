@@ -1,0 +1,33 @@
+var offlineHome=java.lang.System.getenv('STALCRAFT_HOME'); if(!offlineHome) throw new Error('Set STALCRAFT_HOME to the game directory'); offlineHome=String(offlineHome).replace(/\\/g,'/').replace(/\/$/,'');
+// Test-only world, UI and transport adapters. Native tab packets, views, lifecycle,
+// active-view lookup and ServerPacketHandler dispatch/sync bodies remain real.
+var CP=Java.type('javassist.ClassPool'),M=Java.type('javassist.CtNewMethod'),F=Java.type('javassist.CtField'),C=Java.type('javassist.CtNewConstructor'),root=(offlineHome+'/');
+var pool=new CP(true);pool.appendClassPath('work/character-stats-test-only');pool.appendClassPath('work/artifact-effects-test-only');pool.appendClassPath('work/container-test-only');pool.appendClassPath('work/research-test-only');pool.appendClassPath('work/item-test-only');pool.appendClassPath('work/spawner-test-only');pool.appendClassPath('work/offline-patches-character-tabs.jar');pool.appendClassPath(root+'classes/classes.jar');pool.appendClassPath(root+'classes/libs.jar');
+var original=new CP(true);original.appendClassPath('work/offline-patches-character-tabs.jar');original.appendClassPath(root+'classes/classes.jar');original.appendClassPath(root+'classes/libs.jar');
+function shell(n){var c=pool.makeClass(n);c.addConstructor(C.defaultConstructor(c));return c;}function f(c,s){c.addField(F.make(s,c));}function m(c,s){c.addMethod(M.make(s,c));}function save(c){c.writeFile('work/character-tabs-test-only');}
+var grid=shell('hcxt');f(grid,'public java.util.Set opened=new java.util.HashSet();');f(grid,'public java.util.Map sections=new java.util.LinkedHashMap();');m(grid,'public java.util.Set getOpenedInViews(){return opened;}');m(grid,'public java.util.Map getSections(){return sections;}');save(grid);
+for each(var n in ['ohmm','mbgk']){var inv=shell(n);inv.setSuperclass(grid);save(inv);}
+var fml=shell('cpw.mods.fml.common.FMLCommonHandler');f(fml,'public static cpw.mods.fml.relauncher.Side side=cpw.mods.fml.relauncher.Side.SERVER;');m(fml,'public static cpw.mods.fml.common.FMLCommonHandler instance(){return new cpw.mods.fml.common.FMLCommonHandler();}');m(fml,'public cpw.mods.fml.relauncher.Side getEffectiveSide(){return side;}');save(fml);
+var invoke=original.get('gloomyfolken.bundle.common.core.InvokeSideOnly');for each(var method in invoke.getDeclaredMethods())method.setBody('{}');save(invoke);
+var player=pool.get('jlas');f(player,'public qptu field_71071_by;');m(player,'public void func_71053_j(){}');save(player);
+var info=pool.get('lofu');f(info,'public ifxb inventory;');save(info);
+var props=original.get('ifxb');save(props);
+for each(var n in ['dhmd','ekrz','qnrd'])save(original.get(n));
+for each(var n in ['ifxb','dhmd','ekrz'])pool.get(n).detach();pool.insertClassPath('work/character-tabs-test-only');
+var handler=shell('gloomyfolken.mods.stalker.misc.qlfw');f(handler,'public ifxb _y;');f(handler,'public yvlz _c=new yvlz();');f(handler,'public cuno _d;');f(handler,'public cuno _e;');m(handler,'public static void _a(gloomyfolken.mods.stalker.misc.dfak ignored){}');m(handler,'public static gloomyfolken.mods.stalker.misc.qlfw _a(lofu info){gloomyfolken.mods.stalker.misc.qlfw h=new gloomyfolken.mods.stalker.misc.qlfw();h._y=info.inventory;return h;}');m(handler,'public static gloomyfolken.mods.stalker.misc.qlfw _a(jlas player){return _a(ognf._a(player));}');m(handler,'public boolean _u(){return false;}');m(handler,'public float _q(){return 1.0f;}');m(handler,'public float _p(){return 50.0f;}');m(handler,'public float _o(){return 0.0f;}');save(handler);
+var connection=shell('swfs');f(connection,'public jlas player;');m(connection,'public jlas getPlayer(){return player;}');save(connection);
+var wrapper=shell('xael');wrapper.setSuperclass(pool.get('izjo'));f(wrapper,'public gloomyfolken.bundle.common.core.dfaj payload;');wrapper.addConstructor(C.make('public xael(gloomyfolken.bundle.common.core.dfaj value){payload=value;}',wrapper));save(wrapper);
+var sync=shell('yvrb');sync.setSuperclass(pool.get('gloomyfolken.bundle.common.core.dfaj'));f(sync,'public int window;');f(sync,'public int index;');f(sync,'public hcxt inventory;');sync.addConstructor(C.make('public yvrb(int w,int i,hcxt v){window=w;index=i;inventory=v;}',sync));save(sync);
+var basePacket=original.get('gloomyfolken.bundle.common.core.dfaj');basePacket.getClassInitializer().setBody('{}');save(basePacket);
+for each(var n in ['OfflineBalance','OfflineCases']){var h=shell(n);m(h,'public static boolean handle(gloomyfolken.bundle.common.core.dfaj p,swfs c){return false;}');save(h);}
+var stacks=shell('OfflineArtifactStacks');m(stacks,'public static void normalize(jlas p){}');save(stacks);
+var server=original.get('ServerPacketHandler');if(server.getClassInitializer()!=null)server.getClassInitializer().setBody('{}');f(server,'public static java.util.List packets=new java.util.ArrayList();');f(server,'public static java.util.List recipients=new java.util.ArrayList();');server.getDeclaredMethod('sendPacket').setBody('{packets.add($2);recipients.add($1.getPlayer());}');server.getDeclaredMethod('sendPacketToPlayer').setBody('{packets.add($2);recipients.add($1);}');server.getDeclaredMethod('refreshPlayerStats').setBody('{}');save(server);
+var selector=shell('fnmp');f(selector,'public static int selected;');m(selector,'public static void _b(int v){selected=v;}');m(selector,'public static int _e(){return selected;}');save(selector);
+var access=shell('zyjs');m(access,'public static ohmm _a(jlas p){return ognf._a(p).inventory._b;}');m(access,'public static mbgk _b(jlas p){return ognf._a(p).inventory._c;}');save(access);
+var kt=shell('gloomyfolken.mods.ktcore.McExtensionsKt');m(kt,'public static ekrz getEquipmentView(jlas p){return ognf._a(p).inventory._d;}');save(kt);
+var ui=new CP(true);ui.appendClassPath('work/character-stats-test-only');ui.appendClassPath('work/offline-patches-character-tabs.jar');ui.appendClassPath(root+'classes/classes.jar');ui.appendClassPath(root+'classes/libs.jar');
+var gui=ui.get('scpf');f(gui,'public dhmd view;');m(gui,'public dhmd getView(){return view;}');save(gui);
+var charGui=ui.get('gqog');charGui.addConstructor(C.make('public gqog(qnrd v){view=v;effects=new java.util.ArrayList();}',charGui));save(charGui);
+var equipGui=shell('bbcq');equipGui.setSuperclass(gui);equipGui.addConstructor(C.make('public bbcq(ekrz v){view=v;}',equipGui));save(equipGui);
+var mc=ui.get('net.minecraft.client.qlfw');f(mc,'public ywla currentGui;');m(mc,'public void _a(ywla v){currentGui=v;if(v instanceof gqog)((gqog)v).addComponents();}');save(mc);
+print('BUILT native character-tab routing fixtures (never install these classes)');

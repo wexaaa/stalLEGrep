@@ -1,0 +1,21 @@
+var offlineHome=java.lang.System.getenv('STALCRAFT_HOME'); if(!offlineHome) throw new Error('Set STALCRAFT_HOME to the game directory'); offlineHome=String(offlineHome).replace(/\\/g,'/').replace(/\/$/,'');
+var Files=Java.type('java.nio.file.Files'),Paths=Java.type('java.nio.file.Paths'),Str=Java.type('java.lang.String'),CP=Java.type('javassist.ClassPool'),Method=Java.type('javassist.CtNewMethod'),Field=Java.type('javassist.CtField');
+var root=(offlineHome+'/'),source=root+'classes/offline-patches.jar',pool=new CP(true);pool.appendClassPath(source);pool.appendClassPath(root+'classes/classes.jar');pool.appendClassPath(root+'classes/libs.jar');
+var helper=pool.makeClass('OfflineArtifactEffects');helper.addField(Field.make('private static java.util.Map lastHealTick=java.util.Collections.synchronizedMap(new java.util.WeakHashMap());',helper));
+var blocks=String(new Str(Files.readAllBytes(Paths.get('work/OfflineArtifactEffects.methods.java')),'UTF-8')).split('// METHOD').filter(function(s){return s.trim().length>0;});
+for each(var src in blocks){var sig=src.substring(0,src.indexOf('{')),ret=sig.substring(0,sig.indexOf('(')).trim().split(/\s+/).slice(-2)[0];helper.addMethod(Method.make(sig+'{'+(ret==='boolean'?'return false;':ret==='float'?'return 0.0f;':ret==='void'?'':'return null;')+'}',helper));}
+for each(var src in blocks){var m=Method.make(src,helper);helper.removeMethod(helper.getDeclaredMethod(m.getName()));helper.addMethod(m);print('COMPILED '+m.getName());}
+// The offline launcher pins the whole local map to the placeholder "chnpp".
+// There is no online region service here; region-only artifacts must not go inactive.
+var item=pool.get('bsmb');item.getDeclaredMethod('_a',[pool.get('java.lang.String')]).insertBefore('{if(OfflineArtifactEffects.localWorld())return true;}');
+var handler=pool.get('ServerPacketHandler'),Editor=Java.type('javassist.expr.ExprEditor'),calls=0;
+function serverRecalculate(method){method.instrument(new (Java.extend(Editor,{edit:function(call){if(call instanceof Java.type('javassist.expr.MethodCall') && String(call.getClassName())==='gloomyfolken.mods.stalker.misc.qlfw' && String(call.getMethodName())==='_f' && String(call.getSignature())==='()V'){call.replace('{$0._i();$0._k();}');calls++;}}}))());}
+serverRecalculate(handler.getDeclaredMethod('refreshPlayerStats'));serverRecalculate(handler.getDeclaredMethod('applyArmorToPlayer'));if(calls!==2)throw new Error('Expected two client-only recalculation calls, found '+calls);
+handler.getDeclaredMethod('applyArmorToPlayer').insertAfter('{$_=OfflineArtifactEffects.damage($1,$_);}');
+handler.getDeclaredMethod('onPlayerTick').setBody('{if($1==null || $1.field_70170_p==null || $1.field_70170_p.field_72995_K)return; if($1.field_70173_aa==5 || $1.field_70173_aa==25)syncAllGameObjectsToPlayer($1); if($1.field_70173_aa%20==0){refreshPlayerStats($1);OfflineArtifactEffects.periodic($1);}}');
+var view=pool.get('dhmd');view.getDeclaredMethod('onInventoryChanged').insertAfter('{OfflineArtifactEffects.refresh(this.getViewOwner());}');
+var healing=pool.get('gloomyfolken.mods.stalker.misc.hrmn');healing.getDeclaredMethod('_a',[pool.get('buao'),pool.get('float')]).insertBefore('{$2=OfflineArtifactEffects.healing($1,$2);}');
+var replacements={'OfflineArtifactEffects.class':helper.toBytecode(),'bsmb.class':item.toBytecode(),'ServerPacketHandler.class':handler.toBytecode(),'dhmd.class':view.toBytecode(),'gloomyfolken/mods/stalker/misc/hrmn.class':healing.toBytecode()};
+var Jar=Java.type('java.util.jar.JarFile'),Zip=Java.type('java.util.zip.ZipOutputStream'),Entry=Java.type('java.util.zip.ZipEntry'),BA=Java.type('byte[]'),base=new Jar(source),out=new Zip(Files.newOutputStream(Paths.get('work/offline-patches-artifact-effects.jar'))),iter=base.entries(),seen={};
+while(iter.hasMoreElements()){var e=iter.nextElement(),name=String(e.getName());seen[name]=true;out.putNextEntry(new Entry(name));if(replacements[name])out.write(replacements[name]);else{var stream=base.getInputStream(e),b=new BA(8192),n;while((n=stream.read(b))>0)out.write(b,0,n);stream.close();}out.closeEntry();}
+for(var name in replacements)if(!seen[name]){out.putNextEntry(new Entry(name));out.write(replacements[name]);out.closeEntry();}out.close();base.close();print('BUILT work/offline-patches-artifact-effects.jar');
